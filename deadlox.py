@@ -10,13 +10,20 @@ YELLOW = '\033[1;33m'
 RESET = '\033[0;0m'
 
 
+class DbAdapter(object):
+    def __init__(self):
+        username = os.environ.get('MYSQL_USER')
+        password = os.environ.get('MYSQL_PASS')
+        self.host = os.environ.get('MYSQL_HOST')
+        self.port = os.environ.get('MYSQL_PORT')
+        self.engine = create_engine('mysql://{}:{}@{}:{}'.format(username, password, self.host, self.port))
 
 
-def get_recent_deadlocks(engine):
+def get_recent_deadlocks(db):
     START = '\n------------------------\nLATEST DETECTED DEADLOCK\n------------------------\n'
     END = '\n------------\nTRANSACTIONS\n------------\n'
     QUERY = 'show engine innodb status'
-    conn = engine.connect()
+    conn = db.engine.connect()
     result = conn.execute(QUERY).fetchall()
     timestamp = ""
     transaction = ""
@@ -31,9 +38,9 @@ def get_recent_deadlocks(engine):
             print("\n*Exception Raised* {}:{}\n".format(err.__class__.__name__, err))
             return timestamp, transaction
 
-def get_deadlocks(engine):
+def get_deadlocks(db):
     QUERY = text("""SELECT * FROM INFORMATION_SCHEMA.PROCESSLIST WHERE State LIKE 'Lock%'""")
-    conn = engine.connect()
+    conn = db.engine.connect()
     result = conn.execute(QUERY).fetchall()
     if result:
         return result
@@ -41,26 +48,22 @@ def get_deadlocks(engine):
         return None
 
 if __name__ == '__main__':
-    USERNAME = os.environ.get('MYSQL_USER')
-    PASSWORD = os.environ.get('MYSQL_PASS')
-    HOST = os.environ.get('MYSQL_HOST')
-    PORT = os.environ.get('MYSQL_PORT')
-    engine = create_engine('mysql://{}:{}@{}:{}'.format(USERNAME, PASSWORD, HOST, PORT))
+    # Initialize the database adapter
+    db = DbAdapter()
 
     # Current Deadlocks
-    deadlocks = get_deadlocks(engine)
+    deadlocks = get_deadlocks(db)
     if deadlocks:
-        print('[{}] '.format(HOST) + RED + 'Currently Active deadlocks:' + RESET)
+        print('[{}] '.format(db.host) + RED + 'Currently Active deadlocks:' + RESET)
         for row in deadlocks:
             print(row)
     else:
- 
         # Recent Deadlocks
-        ts, trans = get_recent_deadlocks(engine)
+        ts, trans = get_recent_deadlocks(db)
 
         if ts:
-            print('[{}] '.format(HOST) + YELLOW + ' Last deadlock reported at ' + ts + RESET)
+            print('[{}] '.format(db.host) + YELLOW + ' Last deadlock reported at ' + ts + RESET)
             print(trans)
         else:
-            print('[{}] '.format(HOST) + GREEN + 'No Current or Recent database deadlocks detected.' + RESET + '\n')
+            print('[{}] '.format(db.host) + GREEN + 'No Current or Recent database deadlocks detected.' + RESET + '\n')
 
