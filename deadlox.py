@@ -1,5 +1,6 @@
-#!/usr/bin/python27
+#! /usr/bin/env python
 import os
+import time
 from sqlalchemy import create_engine, text
 
 
@@ -9,9 +10,19 @@ GREEN = '\033[0;32m'
 YELLOW = '\033[1;33m'
 RESET = '\033[0;0m'
 
+def setup_env():
+    """ Sets up environment variables from `env` """
+    with open('env', 'r') as f:
+        envdata = f.readlines()
+    # strip out extra whitespace, parse on only the first `=`
+    result = map(lambda k: k.strip().split('=',1), envdata)
+    for r in result:
+        if len(r) == 2:
+            os.environ[r[0]] = r[1]
 
 class DbAdapter(object):
     def __init__(self):
+        setup_env()  # Sets up the environment
         username = os.environ.get('MYSQL_USER')
         password = os.environ.get('MYSQL_PASS')
         self.host = os.environ.get('MYSQL_HOST')
