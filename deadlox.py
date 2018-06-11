@@ -28,26 +28,19 @@ class DbAdapter(object):
         self.host = '127.0.0.1'
         self.port = '3306'
 
-        # Comment out this line when using docker
-        setup_env()  # Sets up the environment
+        # Un-comment out this line when executing without docker
+        # setup_env()  # Sets up the local environment
 
-        # google cloud instance
+        # initialize google cloud proxy
         instance = os.environ.get('MYSQL_INSTANCE')
         if instance:
             self.proxy = CloudSQLProxy(instance=instance)
-            local=False
-        else:
-            local=True
-        self.engine = self.setup_engine(local)
+        self.engine = self.setup_engine()
 
-    def setup_engine(self, local=False):
+    def setup_engine(self):
         try:
             username = os.environ.get('MYSQL_USER')
             password = os.environ.get('MYSQL_PASS')
-            if local:
-                self.host = os.environ.get('MYSQL_HOST')
-                self.port = os.environ.get('MYSQL_PORT')
-            print(username, password, self.host, self.port)
             return create_engine('mysql://{}:{}@{}:{}'.format(username, password, self.host, self.port))
         except Exception as err:
             print(err.__class__.__name__, err)
