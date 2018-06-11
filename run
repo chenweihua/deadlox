@@ -1,3 +1,2 @@
 docker build -t deadlox .
-docker run --env-file=env deadlox
-
+docker run --env-file=env -v ~/.config:/root/.config deadlox

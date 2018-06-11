@@ -1,7 +1,8 @@
 #! /usr/bin/env python
 import os
-import time
 from sqlalchemy import create_engine, text
+
+from proxy import CloudSQLProxy
 
 
 BOLD = '\033[1m'
@@ -22,12 +23,36 @@ def setup_env():
 
 class DbAdapter(object):
     def __init__(self):
+        self.proxy = None
+        self.engine = None
+        self.host = '127.0.0.1'
+        self.port = '3306'
+
+        # Comment out this line when using docker
         setup_env()  # Sets up the environment
-        username = os.environ.get('MYSQL_USER')
-        password = os.environ.get('MYSQL_PASS')
-        self.host = os.environ.get('MYSQL_HOST')
-        self.port = os.environ.get('MYSQL_PORT')
-        self.engine = create_engine('mysql://{}:{}@{}:{}'.format(username, password, self.host, self.port))
+
+        # google cloud instance
+        instance = os.environ.get('MYSQL_INSTANCE')
+        if instance:
+            self.proxy = CloudSQLProxy(instance=instance)
+            local=False
+        else:
+            local=True
+        self.engine = self.setup_engine(local)
+
+    def setup_engine(self, local=False):
+        try:
+            username = os.environ.get('MYSQL_USER')
+            password = os.environ.get('MYSQL_PASS')
+            if local:
+                self.host = os.environ.get('MYSQL_HOST')
+                self.port = os.environ.get('MYSQL_PORT')
+            print(username, password, self.host, self.port)
+            return create_engine('mysql://{}:{}@{}:{}'.format(username, password, self.host, self.port))
+        except Exception as err:
+            print(err.__class__.__name__, err)
+            self.proxy.stop()
+            raise err
 
 
 def get_recent_deadlocks(db):
@@ -59,22 +84,29 @@ def get_deadlocks(db):
         return None
 
 if __name__ == '__main__':
-    # Initialize the database adapter
-    db = DbAdapter()
+    db = None
+    try:
+        # Initialize the database adapter
+        db = DbAdapter()
 
-    # Current Deadlocks
-    deadlocks = get_deadlocks(db)
-    if deadlocks:
-        print('[{}] '.format(db.host) + RED + 'Currently Active deadlocks:' + RESET)
-        for row in deadlocks:
-            print(row)
-    else:
-        # Recent Deadlocks
-        ts, trans = get_recent_deadlocks(db)
-
-        if ts:
-            print('[{}] '.format(db.host) + YELLOW + ' Last deadlock reported at ' + ts + RESET)
-            print(trans)
+        # Current Deadlocks
+        deadlocks = get_deadlocks(db)
+        if deadlocks:
+            print('[{}] '.format(db.host) + RED + 'Currently Active deadlocks:' + RESET)
+            for row in deadlocks:
+                print(row)
         else:
-            print('[{}] '.format(db.host) + GREEN + 'No Current or Recent database deadlocks detected.' + RESET + '\n')
+            # Recent Deadlocks
+            ts, trans = get_recent_deadlocks(db)
 
+            if ts:
+                print('[{}] '.format(db.host) + YELLOW + ' Last deadlock reported at ' + ts + RESET)
+                print(trans)
+            else:
+                print('[{}] '.format(db.host) + GREEN + 'No Current or Recent database deadlocks detected.' + RESET + '\n')
+    except Exception as err:
+        print(err.__class__.__name__, err)
+        pass
+    finally:
+        if db and db.proxy:
+            db.proxy.stop()
